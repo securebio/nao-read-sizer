@@ -1,0 +1,2 @@
+id,fastq_1,fastq_2,outdir
+leia,s3://nao-restricted/JR-2024-08-06/raw/JR-2024-08-06-nR365G1-P001-L003_1.fastq.gz,s3://nao-restricted/JR-2024-08-06/raw/JR-2024-08-06-nR365G1-P001-L003_2.fastq.gz,s3://nao-evan/tempdelete/sizertest_20250502
