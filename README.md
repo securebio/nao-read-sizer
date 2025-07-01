@@ -112,8 +112,6 @@ nextflow run main.nf --bucket my-data-bucket --delivery delivery-to-siz --ignore
 
 **Warning**: This will regenerate SIZ files for ALL FASTQ pairs in the delivery, overwriting any existing SIZ files in the output directory. Use with caution.
 
-**Note**: This is an interim solution. Future versions may include validation of existing SIZ files to automatically detect and reprocess only corrupted or incomplete files.
-
 ### High performance profile
 
 The default profile requires just modest resources (4 CPUs, 6GB memory) for each `SIZER` process. If you're SIZering more than a few thousand read pairs, you probably want to run with the `high_perf` profile, which increases the requirement to 64 CPUs and 120GB memory.
