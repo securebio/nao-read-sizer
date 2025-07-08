@@ -21,7 +21,7 @@ workflow {
       params.bucket, 
       params.delivery,
       params.outdir ? params.outdir : '',
-      params.ignore_existing,
+      params.ignoreExisting,
       script
     )
   } else {

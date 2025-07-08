@@ -110,7 +110,7 @@ However, if you suspect existing SIZ files are corrupted or incomplete (e.g., fr
 nextflow run main.nf --bucket my-data-bucket --delivery delivery-to-siz --ignore-existing
 ```
 
-**Warning**: This will regenerate SIZ files for ALL FASTQ pairs in the delivery, overwriting any existing SIZ files in the output directory. Use with caution.
+**Warning**: This will regenerate SIZ files for _all_ FASTQ pairs in the delivery, overwriting any existing SIZ files in the output directory. Use with caution.
 
 ### High performance profile
 

@@ -121,12 +121,10 @@ nextflow_process {
             def sampleSheetContent = path(cleanPath).text
             def lines = sampleSheetContent.readLines()
             
-            // When ignore_existing is true, the sample sheet should include
-            // all FASTQ pairs, even those that might have existing SIZ files
-            assert lines.size() >= 2 // header and a line for a FASTQ pair that has SIZ
-            
-            // Additional assertions could be added here if we have
-            // test data with known existing SIZ files
+            // The test S3 bucket has exactly one FASTQ pair, which already has a
+            // matching SIZ file. So with --ignore-existing, we should have two rows:
+            // header plus this FASTQ pair.
+            assert lines.size() == 2
         }
     }
 }

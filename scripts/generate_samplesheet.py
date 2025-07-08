@@ -87,13 +87,13 @@ def main():
             id = f[: -len("_2.fastq.gz")]
             ids.setdefault(id, {})["R2"] = raw_dir + f
 
-    # If we're ignoring existing, we don't need to compute processed ids
+    ids_to_skip = set()
+    # If we're ignoring existing, we don't need to compute already processed ids
     if not args.ignore_existing:
-        processed_ids = set()
         for f in siz_files:
             if "_chunk" in f:
                 id = f.partition("_chunk")[0]
-                processed_ids.add(id)
+                ids_to_skip.add(id)
 
     # Write sample sheet
     with open(args.output, "w", newline="") as csvfile:
@@ -101,7 +101,7 @@ def main():
         writer.writerow(["id", "fastq_1", "fastq_2", "outdir"])
 
         for id, reads in ids.items():
-            if not args.ignore_existing and id in processed_ids:
+            if id in ids_to_skip:
                 continue
 
             if "R1" in reads and "R2" in reads:
