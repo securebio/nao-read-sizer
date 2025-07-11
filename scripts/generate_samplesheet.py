@@ -62,6 +62,11 @@ def main():
         action="store_true",
         help="Use --no-sign-request flag with AWS CLI commands (for public repositories)"
     )
+    parser.add_argument(
+        "--ignore-existing",
+        action="store_true",
+        help="Ignore existing SIZ files; sample sheet will include all FASTQ pairs"
+    )
     args = parser.parse_args()
 
     # Construct S3 paths
@@ -82,12 +87,13 @@ def main():
             id = f[: -len("_2.fastq.gz")]
             ids.setdefault(id, {})["R2"] = raw_dir + f
 
-    # Determine processed ids
-    processed_ids = set()
-    for f in siz_files:
-        if "_chunk" in f:
-            id = f.partition("_chunk")[0]
-            processed_ids.add(id)
+    ids_to_skip = set()
+    # If we're ignoring existing, we don't need to compute already processed ids
+    if not args.ignore_existing:
+        for f in siz_files:
+            if "_chunk" in f:
+                id = f.partition("_chunk")[0]
+                ids_to_skip.add(id)
 
     # Write sample sheet
     with open(args.output, "w", newline="") as csvfile:
@@ -95,7 +101,7 @@ def main():
         writer.writerow(["id", "fastq_1", "fastq_2", "outdir"])
 
         for id, reads in ids.items():
-            if id in processed_ids:
+            if id in ids_to_skip:
                 continue
 
             if "R1" in reads and "R2" in reads:

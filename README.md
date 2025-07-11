@@ -100,6 +100,18 @@ To run the pipeline with automatic sample sheet generation:
 nextflow run main.nf --bucket my-data-bucket --delivery delivery-to-siz
 ```
 
+#### Forcing regeneration of existing SIZ files
+
+By default, the automatic sample sheet generation skips FASTQ pairs that already have corresponding SIZ files in the output directory. This prevents unnecessary reprocessing of already-SIZed data.
+
+However, if you suspect existing SIZ files are corrupted or incomplete (e.g., from a previous failed run), you can force regeneration of all SIZ files using the `--ignore-existing` flag:
+
+```bash
+nextflow run main.nf --bucket my-data-bucket --delivery delivery-to-siz --ignore-existing
+```
+
+**Warning**: This will regenerate SIZ files for _all_ FASTQ pairs in the delivery, overwriting any existing SIZ files in the output directory. Use with caution.
+
 ### High performance profile
 
 The default profile requires just modest resources (4 CPUs, 6GB memory) for each `SIZER` process. If you're SIZering more than a few thousand read pairs, you probably want to run with the `high_perf` profile, which increases the requirement to 64 CPUs and 120GB memory.

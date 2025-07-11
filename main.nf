@@ -20,7 +20,8 @@ workflow {
     sampleSheetChannel = GENERATE_SAMPLESHEET(
       params.bucket, 
       params.delivery,
-      params.outdir ? params.outdir : '', 
+      params.outdir ? params.outdir : '',
+      params.ignoreExisting,
       script
     )
   } else {

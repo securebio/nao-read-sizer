@@ -10,7 +10,8 @@ nextflow_process {
                 input[0] = "nao-testing"
                 input[1] = "read-sizer"
                 input[2] = ""
-                input[3] = file("${projectDir}/scripts/generate_samplesheet.py")
+                input[3] = false
+                input[4] = file("${projectDir}/scripts/generate_samplesheet.py")
                 """
             }
         }
@@ -65,7 +66,8 @@ nextflow_process {
                 input[0] = "nao-testing"
                 input[1] = "read-sizer"
                 input[2] = "s3://nao-testing/read-sizer/custom"
-                input[3] = file("${projectDir}/scripts/generate_samplesheet.py")
+                input[3] = false
+                input[4] = file("${projectDir}/scripts/generate_samplesheet.py")
                 """
             }
         }
@@ -86,13 +88,43 @@ nextflow_process {
                 input[0] = "nonexistent-bucket-name-123456789"
                 input[1] = "read-sizer"
                 input[2] = ""
-                input[3] = file("${projectDir}/scripts/generate_samplesheet.py")
+                input[3] = false
+                input[4] = file("${projectDir}/scripts/generate_samplesheet.py")
                 """
             }
         }
 
         then {
             assert process.failed
+        }
+    }
+
+    test("Should ignore existing SIZ files when flag is set") {
+        when {
+            process {
+                """
+                input[0] = "nao-testing"
+                input[1] = "read-sizer"
+                input[2] = ""
+                input[3] = true
+                input[4] = file("${projectDir}/scripts/generate_samplesheet.py")
+                """
+            }
+        }
+        
+        then {
+            assert process.success
+            
+            // Get the sample sheet content
+            def sampleSheetFile = process.out.get(0).toString()
+            def cleanPath = sampleSheetFile.replaceAll(/^\[|\]$/, '')
+            def sampleSheetContent = path(cleanPath).text
+            def lines = sampleSheetContent.readLines()
+            
+            // The test S3 bucket has exactly one FASTQ pair, which already has a
+            // matching SIZ file. So with --ignore-existing, we should have two rows:
+            // header plus this FASTQ pair.
+            assert lines.size() == 2
         }
     }
 }
