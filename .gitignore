@@ -1,103 +1,58 @@
-# Don't commit sample sheet CSVs
-**.csv
+# Sample sheet CSVs
+*.csv
 
-# Prerequisites
-*.d
-
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 *.so
-*.so.*
-*.dylib
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
 
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
 
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
-# Nextflow
-.idea/**
-.gradle
-.*.log*
-.cache/*
-.vagrant/*
-.cache/*
-.nextflow*
-.node-nextflow*
-.devcontainer
-.vscode/*
-*/*/bin/*
-**/build/**
-build/**
-modules/**/build/
-modules/**/*.iml
-modules/nextflow/work/
-**/out/*
-tmp/*
-work/*
-nextflow.eml
-nextflow.iml
-Vagrantfile
-resources/*
-# test/*
-.nf-test
-tools/*
-tests_other
-other
-docs/_build/
-./*.txt
-errors/
-misc/
-cloud/my-*
-docker-test
-docker/dist
-docker/nextflow
-temp
-.dockerignore
-.launch.classpath
-plugins-prod
-sandbox
-wave-tests
-x/*
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
+# OS
+.DS_Store
+Thumbs.db
+
+# Project output
 output/
 bin/
+
