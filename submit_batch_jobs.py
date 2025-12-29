@@ -66,32 +66,38 @@ def monitor_jobs(batch_client, job_tracker: Dict, max_retries: int,
     while job_tracker:
         time.sleep(5)
 
-        for job_id in list(job_tracker.keys()):
-            job_info = batch_client.describe_jobs(jobs=[job_id])['jobs'][0]
-            sample_id = job_tracker[job_id]['sample']['id']
-            status = job_info['status']
+        # Batch describe_jobs calls (up to 100 at a time)
+        job_ids = list(job_tracker.keys())
+        for i in range(0, len(job_ids), 100):
+            batch_ids = job_ids[i:i+100]
+            response = batch_client.describe_jobs(jobs=batch_ids)
 
-            if status == 'SUCCEEDED':
-                print(f"✓ {sample_id} succeeded")
-                del job_tracker[job_id]
+            for job_info in response['jobs']:
+                job_id = job_info['jobId']
+                sample_id = job_tracker[job_id]['sample']['id']
+                status = job_info['status']
 
-            elif status == 'FAILED':
-                retry_count = job_tracker[job_id]['retry_count']
-                reason = job_info.get('statusReason', 'Unknown')
-
-                if retry_count < max_retries:
-                    # Retry with detailed logging
-                    print(f"↻ Retrying {sample_id} (attempt {retry_count + 2}/{max_retries + 1}) - Reason: {reason}")
-                    sample = job_tracker[job_id]['sample']
-                    new_job_id = submit_batch_job(
-                        batch_client, sample, job_queue, job_definition,
-                        chunk_size, zstd_level
-                    )
-                    job_tracker[new_job_id] = {"sample": sample, "retry_count": retry_count + 1}
+                if status == 'SUCCEEDED':
+                    print(f"✓ {sample_id} succeeded")
                     del job_tracker[job_id]
-                else:
-                    print(f"✗ {sample_id} failed permanently after {max_retries + 1} attempts - Reason: {reason}")
-                    del job_tracker[job_id]
+
+                elif status == 'FAILED':
+                    retry_count = job_tracker[job_id]['retry_count']
+                    reason = job_info.get('statusReason', 'Unknown')
+
+                    if retry_count < max_retries:
+                        # Retry with detailed logging
+                        print(f"↻ Retrying {sample_id} (attempt {retry_count + 2}/{max_retries + 1}) - Reason: {reason}")
+                        sample = job_tracker[job_id]['sample']
+                        new_job_id = submit_batch_job(
+                            batch_client, sample, job_queue, job_definition,
+                            chunk_size, zstd_level
+                        )
+                        job_tracker[new_job_id] = {"sample": sample, "retry_count": retry_count + 1}
+                        del job_tracker[job_id]
+                    else:
+                        print(f"✗ {sample_id} failed permanently after {max_retries + 1} attempts - Reason: {reason}")
+                        del job_tracker[job_id]
 
 
 def main():
