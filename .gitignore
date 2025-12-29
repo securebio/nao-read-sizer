@@ -1,3 +1,6 @@
+# Don't commit sample sheet CSVs
+**.csv
+
 # Prerequisites
 *.d
 
