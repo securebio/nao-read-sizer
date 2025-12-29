@@ -34,8 +34,11 @@ def submit_batch_job(batch_client, sample: Dict, job_queue: str, job_definition:
         sizer.sh -s /usr/local/bin/split_interleave_fastqs \\
             -u /sequence_tools/compress_upload.sh \\
             -c {chunk_size} \\
-            -z {zstd_level} \\
-            {sample['fastq_1']} {sample['fastq_2']} {sample['outdir']}
+            -l {zstd_level} \\
+            <(aws s3 cp {sample['fastq_1']} - | gunzip) \\
+            <(aws s3 cp {sample['fastq_2']} - | gunzip) \\
+            {sample['id']} \\
+            {sample['outdir']}{sample['id']}
         """
     ]
 
