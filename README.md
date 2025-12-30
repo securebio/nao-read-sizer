@@ -2,43 +2,40 @@
 
 ## Overview
 
-This repository contains a Python pipeline for converting paired gziped-FASTQ files to [SIZ](#siz-spec) (**s**plit, **i**nterleaved, **z**std-compressed) format. The pipeline is designed for wide parallelism:
-* Each forward-reverse pair of input `.fastq.gz` files is processed in parallel.
-* Within each file pair, zstd compression jobs run in parallel.
+This repository contains an **AWS Batch pipeline** for converting paired gzipped FASTQ files to [SIZ](#siz-spec) (**s**plit, **i**nterleaved, **z**std-compressed) format. The pipeline is designed for wide parallelism on AWS Batch:
+* Each forward-reverse pair of input `.fastq.gz` files is processed as a separate Batch job.
+* Within each job, zstd compression tasks run in parallel.
 * All data movement to and from S3 is by streaming, and data movement on a given machine is within memory.
 
-Note that the pipeline structure is specialized for the NAO use case:
+The pipeline structure is specialized for the NAO use case:
 * Input `.fastq.gz` files are stored in S3.
 * Output `.fastq.zst` files are uploaded to S3.
-* Automatic [sample sheet generation](#automatically-generated-sample-sheet) assumes a NAO-like bucket structure. (Described [below](#automatically-generated-sample-sheet).)
-* Default chunk size and compression level parameters match NAO standards. (1 million read pairs and `-15`, respectively.)
-* [Running on](#running-with-batch) AWS Batch is recommended.
+* Automatic [sample sheet generation](#automatically-generated-sample-sheet) assumes a NAO-like bucket structure.
+* Default chunk size and compression level parameters match NAO standards (1 million read pairs and compression level 15, respectively).
 
 That said, the repository contains no private NAO information and others are welcome to use it.
 
-## Prerequisites and installation
+## Installation
 
-### Installation
+### 1. Clone the repository
+```bash
+git clone git@github.com:naobservatory/read-sizer.git
+cd read-sizer
+```
 
-1. Clone the repository:
-    ```bash
-    git clone git@github.com:naobservatory/read-sizer.git
-    cd read-sizer
-    ```
-2. Install [Python 3.8+](https://www.python.org/downloads/)
-3. Install [UV](https://docs.astral.sh/uv/getting-started/installation/) for dependency management:
-    ```bash
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
-4. Install dependencies:
-    ```bash
-    uv sync
-    ```
-5. Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+### 2. Install Python and UV
+* Install [Python 3.8+](https://www.python.org/downloads/)
+* Install [UV](https://docs.astral.sh/uv/getting-started/installation/) for dependency management:
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+* Install dependencies:
+  ```bash
+  uv sync
+  ```
 
-### AWS access
-
-Configure AWS credentials in `~/.aws/credentials`:
+### 3. Install AWS CLI
+Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and configure your credentials in `~/.aws/credentials`:
 
 ```ini
 [default]
@@ -53,6 +50,30 @@ aws_secret_access_key = <SECRET_ACCESS_KEY>
 > ```
 
 You'll need S3 permissions to read input data and write output data. Automatically generating a sample sheet requires S3 list permissions in the relevant bucket.
+
+## AWS Batch Setup
+
+Before running the pipeline, you'll need to create an AWS Batch compute environment, job queue, and job definition. The recommended configuration for high-performance processing is:
+
+```bash
+aws batch register-job-definition \
+  --job-definition-name sizer-job-def \
+  --type container \
+  --container-properties '{
+    "image": "public.ecr.aws/q0n1c7g8/nao/read-sizer:latest",
+    "vcpus": 64,
+    "memory": 122880,
+    "jobRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/YourBatchJobRole"
+  }' \
+  --timeout attemptDurationSeconds=10800
+```
+
+**Notes**:
+* Memory is in MiB. `122880 MiB = 120 GiB`
+* The `jobRoleArn` is optional - if omitted, containers will inherit permissions from the EC2 instance role in your compute environment. If your compute environment's instances already have S3 access (e.g., via an instance profile with `AmazonS3FullAccess`), you can omit the `jobRoleArn` entirely.
+* If you do specify a `jobRoleArn`, replace `YOUR_ACCOUNT_ID` with your AWS account ID and ensure the role has S3 read/write permissions for your input and output buckets
+* The timeout is set to 3 hours (10800 seconds), which should be sufficient for most samples
+* For compute environment and job queue setup, see the [AWS Batch documentation](https://docs.aws.amazon.com/batch/latest/userguide/getting-started.html)
 
 ## Usage
 
@@ -131,34 +152,7 @@ uv run python submit_batch_jobs.py \
 
 **Warning**: This will regenerate SIZ files for _all_ FASTQ pairs in the delivery, overwriting any existing SIZ files in the output directory. Use with caution.
 
-### Running with AWS Batch
-
-Running the pipeline with AWS Batch is recommended:
-* The pipeline is trivially parallelizable across input file pairs, and Batch is a convenient way to temporarily spin up lots of parallel resources.
-* If you've configured your Batch environment to use spot instances, running with Batch can also be cost saving.
-
-#### Setting up AWS Batch
-
-You'll need to create an AWS Batch job definition that specifies the compute resources for processing. The recommended configuration for high-performance processing is:
-
-```bash
-aws batch register-job-definition \
-  --job-definition-name sizer-job-def \
-  --type container \
-  --container-properties '{
-    "image": "public.ecr.aws/q0n1c7g8/nao/read-sizer:latest",
-    "vcpus": 64,
-    "memory": 122880,
-    "jobRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/YourBatchJobRole"
-  }' \
-  --timeout attemptDurationSeconds=10800
-```
-
-**Note**: Memory is in MiB. `122880 MiB = 120 GiB`. Replace `YOUR_ACCOUNT_ID` with your AWS account ID and ensure your job role has S3 read/write permissions.
-
-For more details on the AWS Batch setup, see [migrate_off_nextflow.md](migrate_off_nextflow.md).
-
-#### Custom parameters
+### Custom parameters
 
 The pipeline supports several optional parameters:
 
@@ -174,7 +168,7 @@ uv run python submit_batch_jobs.py \
 
 Available options:
 * `--chunk-size`: Number of read pairs per chunk (default: 1000000)
-* `--zstd-level`: Zstandard compression level (default: 5)
+* `--zstd-level`: Zstandard compression level (default: 15)
 * `--max-retries`: Maximum retry attempts for failed jobs (default: 3)
 * `--dry-run`: Print jobs without submitting them (useful for testing)
 

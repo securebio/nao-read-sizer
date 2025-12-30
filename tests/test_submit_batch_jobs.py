@@ -16,7 +16,7 @@ class TestSubmitBatchJob:
             'outdir': 's3://bucket/siz/'
         }
 
-        job_id = submit_batch_job(mock_batch, sample, 'queue', 'job-def', 1000000, 5)
+        job_id = submit_batch_job(mock_batch, sample, 'queue', 'job-def', 1000000, 15)
 
         assert job_id == 'job-123'
         mock_batch.submit_job.assert_called_once()
@@ -62,7 +62,7 @@ class TestMonitorJobs:
         }
 
         with patch('time.sleep'):
-            monitor_jobs(mock_batch, job_tracker, 3, 'queue', 'def', 1000000, 5)
+            monitor_jobs(mock_batch, job_tracker, 3, 'queue', 'def', 1000000, 15)
 
         # Should have retried once and then succeeded
         assert mock_batch.submit_job.call_count == 1
@@ -85,7 +85,7 @@ class TestMonitorJobs:
         }
 
         with patch('time.sleep'):
-            monitor_jobs(mock_batch, job_tracker, 3, 'queue', 'def', 1000000, 5)
+            monitor_jobs(mock_batch, job_tracker, 3, 'queue', 'def', 1000000, 15)
 
         # Should not retry, just remove from tracker
         mock_batch.submit_job.assert_not_called()
