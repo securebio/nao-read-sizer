@@ -11,6 +11,7 @@ Usage:
 import argparse
 import boto3
 import csv
+import shlex
 import sys
 import time
 from typing import List, Dict
@@ -35,10 +36,10 @@ def submit_batch_job(batch_client, sample: Dict, job_queue: str, job_definition:
             -u /sequence_tools/compress_upload.sh \\
             -c {chunk_size} \\
             -l {zstd_level} \\
-            <(aws s3 cp {sample['fastq_1']} - | gunzip) \\
-            <(aws s3 cp {sample['fastq_2']} - | gunzip) \\
-            {sample['id']} \\
-            {sample['outdir']}{sample['id']}
+            <(aws s3 cp {shlex.quote(sample['fastq_1'])} - | gunzip) \\
+            <(aws s3 cp {shlex.quote(sample['fastq_2'])} - | gunzip) \\
+            {shlex.quote(sample['id'])} \\
+            {shlex.quote(sample['outdir'] + sample['id'])}
         """
     ]
 
@@ -57,12 +58,17 @@ def submit_batch_job(batch_client, sample: Dict, job_queue: str, job_definition:
 
 
 def monitor_jobs(batch_client, job_tracker: Dict, max_retries: int,
-                job_queue: str, job_definition: str, chunk_size: int, zstd_level: int):
+                job_queue: str, job_definition: str, chunk_size: int, zstd_level: int) -> List[str]:
     """
     Monitor running jobs and retry failures.
 
     job_tracker format: {job_id: {"sample": sample_dict, "retry_count": int}}
+
+    Returns:
+        List of sample IDs that failed permanently.
     """
+    failed_permanently = []
+
     while job_tracker:
         time.sleep(5)
 
@@ -97,7 +103,10 @@ def monitor_jobs(batch_client, job_tracker: Dict, max_retries: int,
                         del job_tracker[job_id]
                     else:
                         print(f"✗ {sample_id} failed permanently after {max_retries + 1} attempts - Reason: {reason}")
+                        failed_permanently.append(sample_id)
                         del job_tracker[job_id]
+
+    return failed_permanently
 
 
 def main():
@@ -179,14 +188,21 @@ def main():
         sys.exit(0)
 
     print(f"\nMonitoring {len(job_tracker)} job(s)...\n")
+    total_jobs = len(job_tracker)
 
     # Monitor and retry
-    monitor_jobs(
+    failed = monitor_jobs(
         batch_client, job_tracker, args.max_retries,
         args.job_queue, args.job_definition, args.chunk_size, args.zstd_level
     )
 
-    print("\nAll jobs completed!")
+    # Print summary
+    succeeded = total_jobs - len(failed)
+    if failed:
+        print(f"\n{succeeded} succeeded, {len(failed)} failed permanently")
+        sys.exit(1)
+    else:
+        print(f"\nAll {succeeded} job(s) completed successfully!")
 
 
 if __name__ == "__main__":
