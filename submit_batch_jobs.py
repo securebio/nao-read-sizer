@@ -31,7 +31,7 @@ def submit_batch_job(batch_client, sample: Dict, job_queue: str, job_definition:
     """Submit a single sizer job to AWS Batch."""
     command = [
         "/bin/bash", "-c",
-        f"""
+        f"""set -e -o pipefail
         sizer.sh -s /usr/local/bin/split_interleave_fastqs \\
             -u /sequence_tools/compress_upload.sh \\
             -c {chunk_size} \\
@@ -70,11 +70,13 @@ def monitor_jobs(batch_client, job_tracker: Dict, max_retries: int,
     failed_permanently = []
 
     while job_tracker:
-        time.sleep(5)
+        time.sleep(10)
 
         # Batch describe_jobs calls (up to 100 at a time)
         job_ids = list(job_tracker.keys())
         for i in range(0, len(job_ids), 100):
+            if i > 0:
+                time.sleep(0.25)
             batch_ids = job_ids[i:i+100]
             response = batch_client.describe_jobs(jobs=batch_ids)
 
