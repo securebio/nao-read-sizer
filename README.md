@@ -2,36 +2,40 @@
 
 ## Overview
 
-This repository contains a Nextflow workflow for converting paired gziped-FASTQ files to [SIZ](#siz-spec) (**s**plit, **i**nterleaved, **z**std-compressed) format. The workflow is designed for wide parallelism:
-* Each forward-reverse pair of input `.fastq.gz` files is processed in parallel.
-* Within each file pair, zstd compression jobs run in parallel.
+This repository contains an **AWS Batch pipeline** for converting paired gzipped FASTQ files to [SIZ](#siz-spec) (**s**plit, **i**nterleaved, **z**std-compressed) format. The pipeline is designed for wide parallelism on AWS Batch:
+* Each forward-reverse pair of input `.fastq.gz` files is processed as a separate Batch job.
+* Within each job, zstd compression tasks run in parallel.
 * All data movement to and from S3 is by streaming, and data movement on a given machine is within memory.
 
-Note that the workflow structure is specialized for the NAO use case:
+The pipeline structure is specialized for the NAO use case:
 * Input `.fastq.gz` files are stored in S3.
 * Output `.fastq.zst` files are uploaded to S3.
-* Automatic [sample sheet generation](#automatically-generated-sample-sheet) assumes a NAO-like bucket structure. (Described [below](#automatically-generated-sample-sheet).)
-* Default chunk size and compression level parameters match NAO standards. (1 million read pairs and `-15`, respectively.)
-* [Running on](#running-with-batch) AWS Batch is recommended.
+* Automatic [sample sheet generation](#automatically-generated-sample-sheet) assumes a NAO-like bucket structure.
+* Default chunk size and compression level parameters match NAO standards (1 million read pairs and compression level 15, respectively).
 
 That said, the repository contains no private NAO information and others are welcome to use it.
 
-## Prerequisites and installation
+## Installation
 
-### Installation
+### 1. Clone the repository
+```bash
+git clone git@github.com:naobservatory/read-sizer.git
+cd read-sizer
+```
 
-1. Clone the repository:
-    ```bash
-    git clone git@github.com:naobservatory/read-sizer.git
-    cd read-sizer
-    ```
-2. [Install Nextflow](https://www.nextflow.io/docs/latest/install.html)
-3. Install [Docker](https://docs.docker.com/engine/install/) ([EC2 instructions](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-docker.html))
-4. Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+### 2. Install Python and UV
+* Install [Python 3.8+](https://www.python.org/downloads/)
+* Install [UV](https://docs.astral.sh/uv/getting-started/installation/) for dependency management:
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+* Install dependencies:
+  ```bash
+  uv sync
+  ```
 
-### AWS access
-
-Configure AWS credentials in `~/.aws/credentials`:
+### 3. Install AWS CLI
+Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and configure your credentials in `~/.aws/credentials`:
 
 ```ini
 [default]
@@ -46,6 +50,30 @@ aws_secret_access_key = <SECRET_ACCESS_KEY>
 > ```
 
 You'll need S3 permissions to read input data and write output data. Automatically generating a sample sheet requires S3 list permissions in the relevant bucket.
+
+## AWS Batch Setup
+
+Before running the pipeline, you'll need to create an AWS Batch compute environment, job queue, and job definition. The recommended configuration for high-performance processing is:
+
+```bash
+aws batch register-job-definition \
+  --job-definition-name sizer-job-def \
+  --type container \
+  --container-properties '{
+    "image": "public.ecr.aws/q0n1c7g8/nao/read-sizer:latest",
+    "vcpus": 64,
+    "memory": 122880,
+    "jobRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/YourBatchJobRole"
+  }' \
+  --timeout attemptDurationSeconds=10800
+```
+
+**Notes**:
+* Memory is in MiB. `122880 MiB = 120 GiB`
+* The `jobRoleArn` is optional - if omitted, containers will inherit permissions from the EC2 instance role in your compute environment. If your compute environment's instances already have S3 access (e.g., via an instance profile with `AmazonS3FullAccess`), you can omit the `jobRoleArn` entirely.
+* If you do specify a `jobRoleArn`, replace `YOUR_ACCOUNT_ID` with your AWS account ID and ensure the role has S3 read/write permissions for your input and output buckets
+* The timeout is set to 3 hours (10800 seconds), which should be sufficient for most samples
+* For compute environment and job queue setup, see the [AWS Batch documentation](https://docs.aws.amazon.com/batch/latest/userguide/getting-started.html)
 
 ## Usage
 
@@ -70,15 +98,18 @@ id,fastq_1,fastq_2,outdir
 naboo,s3://bucket/raw/naboo_lane1_1.fastq.gz,s3://bucket/raw/naboo_lane1_2.fastq.gz,s3://output-bucket/
 yavin,s3://bucket/raw/yavin_lane1_1.fastq.gz,s3://bucket/raw/yavin_lane1_2.fastq.gz,s3://output-bucket/
 ```
-The Nextflow workflow is just a parallel for loop: for each row of the sample sheet, SIZer the reads in `fastq_1` and `fastq_2` to files `<outdir><id>_chunkNNNNNN.fastq.zst`.
+The pipeline is just a parallel for loop: for each row of the sample sheet, SIZer the reads in `fastq_1` and `fastq_2` to files `<outdir><id>_chunkNNNNNN.fastq.zst`.
 There's no requirement that all the inputs or outputs are in the same bucket -- just make sure you have the relevant S3 permissions.
 
 Note how `id` is directly appended to `outdir`. This means output _directories_ should end with a slash. Non-slash-terminated `outdirs` like `s3://a/b` will yield output files like `s3://a/b<id>_chunkNNNNNN.fastq.zst`.
 
 
 Once you have a sample sheet you're happy with, run the pipeline:
-```
-nextflow run main.nf --sample_sheet <path-to-sample-sheet>
+```bash
+uv run python submit_batch_jobs.py \
+  --sample-sheet <path-to-sample-sheet> \
+  --job-queue <your-batch-queue> \
+  --job-definition <your-job-definition>
 ```
 
 ### Automatically generated sample sheet
@@ -93,11 +124,15 @@ Automatic sample sheet generation assumes:
 * You want to SIZer all raw files in the corresponding delivery
 * You will specify `--outdir`, or you want outputs in `s3://<bucket>/<delivery>/siz/<id>_chunkNNNNNN.fastq.zst`.
 
-If some of these conditions don't hold, it may still be helpful to execute `generate_samplesheet.py` outside of the Nextflow workflow to generate a sample sheet you can modify.
+If some of these conditions don't hold, it may still be helpful to execute `generate_samplesheet.py` outside of the pipeline to generate a sample sheet you can modify.
 
 To run the pipeline with automatic sample sheet generation:
 ```bash
-nextflow run main.nf --bucket my-data-bucket --delivery delivery-to-siz
+uv run python submit_batch_jobs.py \
+  --bucket my-data-bucket \
+  --delivery delivery-to-siz \
+  --job-queue <your-batch-queue> \
+  --job-definition <your-job-definition>
 ```
 
 #### Forcing regeneration of existing SIZ files
@@ -107,35 +142,35 @@ By default, the automatic sample sheet generation skips FASTQ pairs that already
 However, if you suspect existing SIZ files are corrupted or incomplete (e.g., from a previous failed run), you can force regeneration of all SIZ files using the `--ignore-existing` flag:
 
 ```bash
-nextflow run main.nf --bucket my-data-bucket --delivery delivery-to-siz --ignore-existing
+uv run python submit_batch_jobs.py \
+  --bucket my-data-bucket \
+  --delivery delivery-to-siz \
+  --job-queue <your-batch-queue> \
+  --job-definition <your-job-definition> \
+  --ignore-existing
 ```
 
 **Warning**: This will regenerate SIZ files for _all_ FASTQ pairs in the delivery, overwriting any existing SIZ files in the output directory. Use with caution.
 
-### High performance profile
+### Custom parameters
 
-The default profile requires just modest resources (4 CPUs, 6GB memory) for each `SIZER` process. If you're SIZering more than a few thousand read pairs, you probably want to run with the `high_perf` profile, which increases the requirement to 64 CPUs and 120GB memory.
+The pipeline supports several optional parameters:
 
-### Running with Batch
-
-Running the workflow with AWS Batch is recommended:
-* The workflow is trivially parallelizable across input file pairs, and Batch is a convenient way to temporarily spin up lots of parallel resources.
-* If you've configured your Batch environment to use spot instances, running with Batch can also be cost saving.
-
-To run the workflow with Batch:
-1. Update the `process.queue =` line in `nextflow.config` to point at your Batch queue.
-2. When you invoke Nextflow, do so with `-profile batch`.
-3. Specify a working directory in S3.
-
-For example:
-```
-nextflow run main.nf --sample_sheet my_sample_sheet.csv -profile batch -work-dir s3://my-bucket/nf_work/
+```bash
+uv run python submit_batch_jobs.py \
+  --sample-sheet samples.csv \
+  --job-queue <your-batch-queue> \
+  --job-definition <your-job-definition> \
+  --chunk-size 500000 \
+  --zstd-level 10 \
+  --max-retries 5
 ```
 
-It is _recommended_ to also use the `high_perf` profile:
-```
-nextflow run main.nf --sample_sheet my_sample_sheet.csv -profile batch,high_perf -work-dir s3://my-bucket/nf_work/
-```
+Available options:
+* `--chunk-size`: Number of read pairs per chunk (default: 1000000)
+* `--zstd-level`: Zstandard compression level (default: 15)
+* `--max-retries`: Maximum retry attempts for failed jobs (default: 3)
+* `--dry-run`: Print jobs without submitting them (useful for testing)
 
 
 # SIZ: **S**plit, **i**nterleaved, **z**std compressed

@@ -14,27 +14,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          python-version: '3.11'
 
-      - name: Configure AWS CLI
-        run: |
-          aws configure set aws_access_key_id ${{ secrets.NAO_TESTING_ACCESS_KEY }}
-          aws configure set aws_secret_access_key ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
-          aws configure set default.region us-east-1
+      - name: Install UV
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      - name: Setup Nextflow latest-edge
-        uses: nf-core/setup-nextflow@v2
-        with:
-          version: "latest-edge"
-
-      - name: Install nf-test
-        run: |
-          wget -qO- https://get.nf-test.com | bash
-          sudo mv nf-test /usr/local/bin/
+      - name: Install dependencies
+        run: uv sync --extra test
 
       - name: Run Tests
-        run: nf-test test --ci --verbose
+        run: uv run pytest tests/ -v
