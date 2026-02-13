@@ -117,7 +117,7 @@ uv run python submit_batch_jobs.py \
 If no sample sheet is provided but `--bucket` and `--delivery` are specified, a sample sheet will be automatically generated using `scripts/generate_samplesheet.py` by:
 1. Scanning the input directory `s3://<bucket>/<delivery>/raw/` for `.fastq.gz` files
 2. Identifying pairs of files that need processing (files that don't already have a processed version in the output directory `s3://<bucket>/<delivery>/siz/`)
-3. The output directory for the SIZ files is inferred from the input paths if `--outdir` is not specified.
+3. The output directory for the SIZ files is inferred from the input bucket and delivery if `--outdir` is not specified.
 
 Automatic sample sheet generation assumes:
 * Raw data are in `s3://<bucket>/<delivery>/raw/<id>_{1,2}.fastq.gz`
