@@ -3,7 +3,6 @@ import argparse
 import subprocess
 import csv
 import sys
-import re
 
 
 def list_s3_files(s3_path, allow_missing=False, no_sign_request=False):
@@ -34,15 +33,6 @@ def list_s3_files(s3_path, allow_missing=False, no_sign_request=False):
             sys.exit(1)
 
 
-def infer_output_dir(fastq_path):
-    """Infer output directory by replacing 'raw' with 'siz' in the path"""
-    # Replace /raw/ with /siz/
-    output_dir = fastq_path.replace("/raw/", "/siz/")
-    # Remove the filename to get just the directory
-    output_dir = re.sub(r"/[^/]+$", "/", output_dir)
-    return output_dir
-
-
 def generate_samplesheet(bucket, delivery, outdir=None, ignore_existing=False, no_sign_request=False):
     """
     Generate sample sheet data from raw FASTQ files and existing SIZ files.
@@ -50,18 +40,16 @@ def generate_samplesheet(bucket, delivery, outdir=None, ignore_existing=False, n
     Args:
         bucket: S3 bucket name
         delivery: Delivery folder name
-        outdir: Custom output directory (default: infer from raw path)
+        outdir: Custom output directory (default: s3://bucket/delivery/siz/)
         ignore_existing: If True, ignore existing SIZ files and include all FASTQ pairs
         no_sign_request: Use --no-sign-request flag with AWS CLI commands
 
     Returns:
         List of dicts with keys: id, fastq_1, fastq_2, outdir
     """
-    # Construct S3 paths
+    # Lookup existing raw and SIZ files
     raw_dir = f"s3://{bucket}/{delivery}/raw/"
-    siz_dir = f"s3://{bucket}/{delivery}/siz/"
-
-    # List files in raw and siz directories
+    siz_dir = f"s3://{bucket}/{delivery}/siz/" if outdir is None else outdir
     raw_files = list_s3_files(raw_dir, allow_missing=False, no_sign_request=no_sign_request)
     siz_files = list_s3_files(siz_dir, allow_missing=True, no_sign_request=no_sign_request)
 
@@ -90,18 +78,11 @@ def generate_samplesheet(bucket, delivery, outdir=None, ignore_existing=False, n
             continue
 
         if "R1" in reads and "R2" in reads:
-            # Use provided outdir if available
-            if outdir:
-                sample_outdir = outdir
-            # Otherwise infer from fastq_1 path
-            else:
-                sample_outdir = infer_output_dir(reads["R1"])
-
             samples.append({
                 "id": id,
                 "fastq_1": reads["R1"],
                 "fastq_2": reads["R2"],
-                "outdir": sample_outdir
+                "outdir": siz_dir
             })
         else:
             sys.stderr.write(f"Warning: Incomplete pair for id {id}\n")
@@ -116,7 +97,7 @@ def main():
     parser.add_argument("--bucket", required=True, help="S3 bucket name")
     parser.add_argument("--delivery", required=True, help="Delivery folder name")
     parser.add_argument(
-        "--outdir", help="Custom output directory (default: infer from raw path)"
+        "--outdir", help="Custom output directory (default: s3://bucket/delivery/siz/)"
     )
     parser.add_argument(
         "--output",

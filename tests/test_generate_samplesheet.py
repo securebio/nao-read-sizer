@@ -1,14 +1,6 @@
 """Simple tests for generate_samplesheet.py"""
-import pytest
-from unittest.mock import patch
-from scripts.generate_samplesheet import generate_samplesheet, infer_output_dir
-
-
-class TestInferOutputDir:
-    def test_replaces_raw_with_siz(self):
-        input_path = "s3://bucket/delivery/raw/sample_1.fastq.gz"
-        expected = "s3://bucket/delivery/siz/"
-        assert infer_output_dir(input_path) == expected
+from unittest.mock import patch, call
+from scripts.generate_samplesheet import generate_samplesheet
 
 
 class TestGenerateSamplesheet:
@@ -52,6 +44,24 @@ class TestGenerateSamplesheet:
 
         assert len(samples) == 1  # Should include sample1 despite existing siz
         assert samples[0]['id'] == 'sample1'
+
+    @patch('scripts.generate_samplesheet.list_s3_files')
+    def test_custom_outdir(self, mock_list_s3):
+        mock_list_s3.side_effect = [
+            ['sample1_1.fastq.gz', 'sample1_2.fastq.gz'],  # raw files
+            []  # no existing files in custom outdir
+        ]
+
+        custom_outdir = 's3://other-bucket/results/siz/'
+        samples = generate_samplesheet('bucket', 'delivery', outdir=custom_outdir)
+
+        assert len(samples) == 1
+        assert samples[0]['outdir'] == custom_outdir
+        # Verify existing-file lookup used the custom outdir, not the default
+        mock_list_s3.assert_has_calls([
+            call('s3://bucket/delivery/raw/', allow_missing=False, no_sign_request=False),
+            call(custom_outdir, allow_missing=True, no_sign_request=False),
+        ])
 
     @patch('scripts.generate_samplesheet.list_s3_files')
     def test_skips_incomplete_pairs(self, mock_list_s3):
