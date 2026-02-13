@@ -129,7 +129,7 @@ def main():
     parser.add_argument("--job-definition", required=True, help="AWS Batch job definition name")
 
     # Optional parameters
-    parser.add_argument("--outdir", help="Custom output directory (default: infer from raw path)")
+    parser.add_argument("--outdir", help="Custom output directory (default: s3://bucket/delivery/siz/)")
     parser.add_argument("--chunk-size", type=int, default=1000000, help="Chunk size (default: 1000000)")
     parser.add_argument("--zstd-level", type=int, default=15, help="Zstd compression level (default: 15)")
     parser.add_argument("--max-retries", type=int, default=3, help="Max retry attempts per job (default: 3)")
